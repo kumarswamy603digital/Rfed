@@ -17,6 +17,7 @@
     saved: loadSaved(),
     savedOnly: false,
     live: false,
+    analyses: {}, // id -> { loading | ok | message | opportunity | commentsAnalyzed }
   };
 
   /* ---------- DOM refs ---------- */
@@ -30,6 +31,7 @@
     savedPill: document.getElementById("savedPill"),
     savedCount: document.getElementById("savedCount"),
     feedStatus: document.getElementById("feedStatus"),
+    aiReport: document.getElementById("aiReport"),
     digestForm: document.getElementById("digestForm"),
     digestEmail: document.getElementById("digestEmail"),
     digestOk: document.getElementById("digestOk"),
@@ -102,6 +104,9 @@
           <span class="metric">&#9671; ${fmt(s.comments)}</span>
           <span class="card-author">u/${esc(s.author)}</span>
           <span class="foot-actions">
+            <button class="btn-analyze" data-action="analyze" data-id="${esc(s.id)}">
+              <span class="ai-spark">&#10022;</span> ANALYZE
+            </button>
             <button class="btn-save ${isSaved ? "saved" : ""}" data-action="save" data-id="${esc(s.id)}">
               ${isSaved ? "SAVED" : "SAVE"}
             </button>
@@ -110,7 +115,46 @@
             </a>
           </span>
         </div>
+        ${analysisPanelHTML(s.id)}
       </article>`;
+  }
+
+  /* Inline AI pain-point / opportunity panel for a card. */
+  function analysisPanelHTML(id) {
+    const a = state.analyses[id];
+    if (!a) return "";
+    if (a.loading) {
+      return `<div class="ai-panel"><div class="ai-loading"><span class="ai-spark spin">&#10022;</span> Reading the comments for pain points&hellip;</div></div>`;
+    }
+    if (!a.ok) {
+      return `<div class="ai-panel"><div class="ai-note">${esc(a.message || "AI analysis unavailable.")}</div></div>`;
+    }
+    const o = a.opportunity;
+    if (!o) return `<div class="ai-panel"><div class="ai-note">No clear opportunity found in this thread.</div></div>`;
+    return `<div class="ai-panel">${opportunityHTML(o, a.commentsAnalyzed)}</div>`;
+  }
+
+  /* Shared renderer for an AI opportunity object. */
+  function opportunityHTML(o, commentsAnalyzed) {
+    const opp = o.opportunity || {};
+    const pains = (o.painPoints || [])
+      .map((p) => `<li>${esc(p)}</li>`) .join("");
+    const field = (label, val) =>
+      val ? `<p class="ai-field"><span class="ai-field-label">${esc(label)}</span> ${esc(val)}</p>` : "";
+    const conf = o.confidence ? `<span class="ai-conf ai-conf-${esc(o.confidence)}">${esc(o.confidence)} confidence</span>` : "";
+    return `
+      <div class="ai-head">
+        <span class="ai-badge"><span class="ai-spark">&#10022;</span> AI OPPORTUNITY</span>
+        ${conf}
+        ${commentsAnalyzed != null ? `<span class="ai-meta">${commentsAnalyzed} comments read</span>` : ""}
+      </div>
+      ${opp.headline ? `<h3 class="ai-headline">${esc(opp.headline)}</h3>` : ""}
+      ${o.plainEnglish ? `<p class="ai-plain">${esc(o.plainEnglish)}</p>` : ""}
+      ${pains ? `<p class="ai-sub">Pain points people mentioned</p><ul class="ai-pains">${pains}</ul>` : ""}
+      ${field("Problem", opp.problem)}
+      ${field("Who has it", opp.who)}
+      ${field("What to build", opp.solution)}
+      ${field("Why now", opp.whyNow)}`;
   }
 
   function render() {
@@ -193,13 +237,62 @@
   }
 
   function onCardClick(e) {
-    const btn = e.target.closest("[data-action='save']");
-    if (!btn) return;
-    const id = btn.getAttribute("data-id");
-    if (state.saved.has(id)) state.saved.delete(id);
-    else state.saved.add(id);
-    persistSaved();
-    renderSavedPill();
+    const saveBtn = e.target.closest("[data-action='save']");
+    if (saveBtn) {
+      const id = saveBtn.getAttribute("data-id");
+      if (state.saved.has(id)) state.saved.delete(id);
+      else state.saved.add(id);
+      persistSaved();
+      renderSavedPill();
+      render();
+      return;
+    }
+    const analyzeBtn = e.target.closest("[data-action='analyze']");
+    if (analyzeBtn) {
+      analyzeSignal(analyzeBtn.getAttribute("data-id"));
+    }
+  }
+
+  /* Ask the backend AI to analyze a single post's comments -> opportunity. */
+  async function analyzeSignal(id) {
+    const sig = state.signals.find((s) => s.id === id);
+    if (!sig) return;
+
+    // Toggle closed if already analyzed.
+    if (state.analyses[id] && !state.analyses[id].loading) {
+      delete state.analyses[id];
+      render();
+      return;
+    }
+
+    state.analyses[id] = { loading: true };
+    render();
+
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: sig.id,
+          title: sig.title,
+          subreddit: sig.subreddit,
+          permalink: sig.permalink,
+          desc: sig.desc,
+          category: sig.category,
+          match: sig.match,
+        }),
+      });
+      const data = await res.json();
+      if (data && data.ok && data.opportunity) {
+        state.analyses[id] = { ok: true, opportunity: data.opportunity, commentsAnalyzed: data.commentsAnalyzed };
+      } else if (data && data.aiConfigured === false) {
+        state.analyses[id] = { ok: false, message: data.hint || "AI is not configured on this deployment. Add OPENAI_API_KEY in Vercel." };
+      } else {
+        state.analyses[id] = { ok: false, message: "Couldn't analyze this thread right now. Try again shortly." };
+      }
+    } catch {
+      state.analyses[id] = { ok: false, message: "Analysis needs the backend (deploy on Vercel with OPENAI_API_KEY set)." };
+    }
     render();
   }
 
@@ -220,21 +313,52 @@
     if (!email) return;
 
     const joinBtn = el.digestForm.querySelector(".digest-join");
-    if (joinBtn) { joinBtn.disabled = true; joinBtn.textContent = "\u2026"; }
+    if (joinBtn) { joinBtn.disabled = true; joinBtn.textContent = "WORKING\u2026"; }
 
     try { localStorage.setItem(LS_EMAIL, email); } catch {}
 
-    // Register with the backend; if it's not deployed, still confirm locally.
+    let data = null;
     try {
-      await fetch("/api/digest", {
+      const res = await fetch("/api/digest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, send: true }),
       });
-    } catch { /* offline / static deploy — local confirmation is enough */ }
+      data = await res.json();
+    } catch { /* offline / static deploy */ }
 
     el.digestForm.hidden = true;
     el.digestOk.hidden = false;
+
+    if (data && data.ok) {
+      el.digestOk.textContent = data.note || "You're on the list.";
+      if (data.opportunities && data.opportunities.length) {
+        renderAiReport(data.opportunities, data.emailed ? email : null);
+      }
+    } else {
+      el.digestOk.textContent =
+        "Saved your email. AI reports need the backend deployed on Vercel with OPENAI_API_KEY + RESEND_API_KEY.";
+    }
+  }
+
+  /* Render the AI opportunity report at the top of the feed. */
+  function renderAiReport(opportunities, emailedTo) {
+    const items = opportunities.map((o, i) => `
+      <article class="ai-card">
+        <div class="ai-card-idx">#${i + 1}</div>
+        <div class="ai-card-body">${opportunityHTML(o, null)}
+          <p class="ai-source"><a href="${esc(o.url)}" target="_blank" rel="noopener noreferrer">r/${esc(o.subreddit)} source &#8599;</a></p>
+        </div>
+      </article>`).join("");
+
+    el.aiReport.innerHTML = `
+      <div class="ai-report-head">
+        <h2 class="ai-report-title"><span class="ai-spark">&#10022;</span> Your AI opportunity report</h2>
+        ${emailedTo ? `<span class="ai-report-sent">Emailed to ${esc(emailedTo)}</span>` : ""}
+      </div>
+      <div class="ai-report-grid">${items}</div>`;
+    el.aiReport.hidden = false;
+    el.aiReport.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function setStatus(html) {

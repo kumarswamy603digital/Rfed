@@ -7,7 +7,11 @@
 
   /* The founder communities we scan, in coverage order. */
   FR.config = {
-    subreddits: ["cofounder", "startups", "Entrepreneur", "SaaS", "SideProject"],
+    subreddits: [
+      "cofounder", "startups", "Entrepreneur", "SaaS", "SideProject",
+      "indiehackers", "EntrepreneurRideAlong", "growmybusiness",
+      "smallbusiness", "microsaas",
+    ],
     // How many raw posts to pull per subreddit per scan.
     pullSize: 40,
     // How often the client re-scans (ms). 15 min.
