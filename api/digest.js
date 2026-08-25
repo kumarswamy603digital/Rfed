@@ -1,13 +1,22 @@
 /* ===================================================================
-   POST /api/digest — daily-digest email signup.
-   Body: { "email": "you@founder.co" }
+   POST /api/digest — join the digest AND (when configured) generate an
+   AI opportunity report and email it via Resend.
 
-   Storage is intentionally pluggable and dependency-free:
-     • If the DIGEST_WEBHOOK_URL env var is set, the signup is forwarded
-       there (Zapier / Make / your ESP / a serverless DB webhook).
-     • Otherwise the signup is validated and accepted (logged) so the
-       flow works out of the box; wire up persistence when you're ready.
+   Body: { "email": "you@founder.co", "send": true }
+
+   Behavior:
+     • Always validates + records the signup (and forwards it to
+       DIGEST_WEBHOOK_URL if set).
+     • If send !== false and OPENAI_API_KEY is configured, it scans Reddit,
+       reads comments for pain points, and generates startup opportunities.
+     • If RESEND_API_KEY is configured, it emails that report to the user.
+     • Returns the generated opportunities so the UI can show them inline.
+   Missing keys degrade gracefully (the signup still succeeds).
    =================================================================== */
+
+const report = require("../lib/report.js");
+const mailer = require("../lib/email.js");
+const ai = require("../lib/ai.js");
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -76,5 +85,67 @@ module.exports = async function handler(req, res) {
     console.log("digest signup:", JSON.stringify(record));
   }
 
-  res.status(200).json({ ok: true, email });
+  const aiConfigured = ai.isConfigured();
+  const emailConfigured = mailer.isConfigured();
+  const wantSend = body.send !== false; // default: generate + email now
+
+  // Just subscribing (or AI disabled) — confirm and tell the user what's missing.
+  if (!wantSend || !aiConfigured) {
+    return res.status(200).json({
+      ok: true,
+      email,
+      subscribed: true,
+      aiConfigured,
+      emailConfigured,
+      emailed: false,
+      note: aiConfigured
+        ? "Subscribed. Your first AI report will arrive on the next digest run."
+        : "Subscribed. Add OPENAI_API_KEY (and RESEND_API_KEY) in Vercel to enable AI reports.",
+    });
+  }
+
+  // Generate the AI opportunity report now.
+  let rep;
+  try {
+    rep = await report.buildReport({ limit: parseInt(body.limit, 10) || 6 });
+  } catch (err) {
+    return res.status(200).json({
+      ok: true, email, subscribed: true, aiConfigured, emailConfigured,
+      emailed: false, note: "Subscribed, but report generation failed: " + String(err && err.message),
+    });
+  }
+
+  if (!rep.ok || !rep.opportunities.length) {
+    return res.status(200).json({
+      ok: true, email, subscribed: true, aiConfigured, emailConfigured,
+      emailed: false, opportunities: [],
+      note: "Subscribed, but no opportunities could be generated right now. Will retry on the next run.",
+    });
+  }
+
+  // Email it via Resend (if configured).
+  let emailed = false;
+  let emailError;
+  if (emailConfigured) {
+    const sent = await mailer.sendDigest(email, rep.opportunities);
+    emailed = !!sent.ok;
+    if (!sent.ok) emailError = sent.error;
+  }
+
+  return res.status(200).json({
+    ok: true,
+    email,
+    subscribed: true,
+    aiConfigured,
+    emailConfigured,
+    emailed,
+    emailError,
+    count: rep.opportunities.length,
+    opportunities: rep.opportunities,
+    note: emailed
+      ? "Report emailed. It's also shown below."
+      : emailConfigured
+        ? "Generated the report, but the email failed to send (" + emailError + "). Shown below."
+        : "Generated the report. Add RESEND_API_KEY in Vercel to also email it. Shown below.",
+  });
 };

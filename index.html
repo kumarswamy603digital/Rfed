@@ -112,6 +112,7 @@
     <div class="feed-layout">
       <div class="feed-main">
         <div class="feed-status" id="feedStatus" hidden></div>
+        <section id="aiReport" class="ai-report" hidden></section>
         <div id="cards" class="cards"></div>
         <div id="emptyState" class="empty" hidden>No signals match your filters.</div>
       </div>
@@ -123,13 +124,13 @@
         </div>
 
         <div class="side-card digest" id="digest">
-          <h3 class="digest-title">Daily digest</h3>
-          <p class="digest-copy">The top 5 signals, scored to your profile, in your inbox at 7am.</p>
+          <h3 class="digest-title">AI opportunity report</h3>
+          <p class="digest-copy">Our AI reads the comments for real pain points and turns them into startup opportunities &mdash; emailed to you in plain English.</p>
           <form class="digest-form" id="digestForm">
             <input type="email" id="digestEmail" placeholder="you@founder.co" required />
-            <button type="submit" class="digest-join">JOIN</button>
+            <button type="submit" class="digest-join">EMAIL ME</button>
           </form>
-          <p class="digest-ok" id="digestOk" hidden>You're on the list &mdash; first digest lands 7am.</p>
+          <p class="digest-ok" id="digestOk" hidden></p>
         </div>
       </aside>
     </div>
