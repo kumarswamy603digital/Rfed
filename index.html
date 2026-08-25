@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Founder Radar — Every startup opportunity buried in Reddit, on one page.</title>
+  <meta name="description" content="Founder Radar scans the busiest founder communities on Reddit, filters the noise, and surfaces only the co-founder searches, validated ideas, and early roles worth your time." />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- ===================== NAV ===================== -->
+  <header class="nav" id="top">
+    <div class="nav-inner">
+      <a class="brand" href="#top">
+        <span class="brand-dot"></span>
+        <span class="brand-name">FOUNDER<span class="brand-slash">/</span>RADAR</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#feed">FEED</a>
+        <a href="#sources">SOURCES</a>
+        <a href="#digest">DIGEST</a>
+      </nav>
+      <button class="saved-pill" id="savedPill" type="button">
+        SAVED <span class="saved-sep">•</span> <span id="savedCount">0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===================== HERO ===================== -->
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="hero-left">
+        <p class="eyebrow">AI-CURATED <span class="eyebrow-dot">•</span> UPDATED EVERY 15 MIN</p>
+        <h1 class="headline">
+          Every startup opportunity buried in Reddit, <em>on one page.</em>
+        </h1>
+        <p class="hero-sub">
+          Founder Radar reads the noise so you don't have to. We scan the
+          busiest founder communities, filter out the chatter, and surface only
+          the co-founder searches, validated ideas, and early roles worth your time.
+        </p>
+        <div class="hero-cta">
+          <a href="#feed" class="btn-primary">BROWSE THE FEED <span class="arrow">&darr;</span></a>
+          <span class="cta-note"><span id="sourcesConnected">5</span> SOURCES CONNECTED</span>
+        </div>
+      </div>
+
+      <!-- LIVE SCAN card -->
+      <aside class="scan-card" aria-label="Live scan status">
+        <div class="scan-head">
+          <span class="scan-label">LIVE SCAN</span>
+          <span class="scan-status"><span class="status-dot"></span> ACTIVE</span>
+        </div>
+        <div class="scan-grid">
+          <div class="scan-stat">
+            <div class="stat-num" id="statScanned">4,218</div>
+            <div class="stat-label">POSTS SCANNED / 24H</div>
+          </div>
+          <div class="scan-stat">
+            <div class="stat-num accent" id="statSignals">8</div>
+            <div class="stat-label">SIGNALS SURFACED</div>
+          </div>
+          <div class="scan-divider"></div>
+          <div class="scan-stat">
+            <div class="stat-num" id="statNoise">93%</div>
+            <div class="stat-label">NOISE FILTERED</div>
+          </div>
+          <div class="scan-stat">
+            <div class="stat-num" id="statCadence">15m</div>
+            <div class="stat-label">REFRESH CADENCE</div>
+          </div>
+        </div>
+        <p class="scan-foot">Relevance scored against your stage, skills, and interests.</p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ===================== FEED ===================== -->
+  <section class="feed" id="feed">
+    <!-- Controls -->
+    <div class="controls">
+      <div class="filters" id="filters" role="tablist" aria-label="Signal filters">
+        <button class="chip active" data-filter="all" role="tab">ALL SIGNAL <span class="chip-count" data-count="all">8</span></button>
+        <button class="chip" data-filter="cofounder" role="tab">CO-FOUNDERS <span class="chip-count" data-count="cofounder">3</span></button>
+        <button class="chip" data-filter="idea" role="tab">IDEAS <span class="chip-count" data-count="idea">2</span></button>
+        <button class="chip" data-filter="hiring" role="tab">HIRING <span class="chip-count" data-count="hiring">1</span></button>
+        <button class="chip" data-filter="insight" role="tab">INSIGHTS <span class="chip-count" data-count="insight">2</span></button>
+      </div>
+      <div class="controls-right">
+        <div class="search-wrap">
+          <span class="search-icon">&#8981;</span>
+          <input id="search" type="search" placeholder="Search signals, tags&hellip;" autocomplete="off" />
+        </div>
+        <label class="sort-wrap">
+          <span class="sort-label">SORT:</span>
+          <select id="sort">
+            <option value="match">MATCH</option>
+            <option value="new">NEWEST</option>
+            <option value="top">TOP</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <!-- Layout: cards + sidebar -->
+    <div class="feed-layout">
+      <div class="feed-main">
+        <div class="feed-status" id="feedStatus" hidden></div>
+        <div id="cards" class="cards"></div>
+        <div id="emptyState" class="empty" hidden>No signals match your filters.</div>
+      </div>
+
+      <aside class="sidebar">
+        <div class="side-card" id="sources">
+          <h3 class="side-title">SOURCE COVERAGE</h3>
+          <ul class="source-list" id="sourceList"></ul>
+        </div>
+
+        <div class="side-card digest" id="digest">
+          <h3 class="digest-title">Daily digest</h3>
+          <p class="digest-copy">The top 5 signals, scored to your profile, in your inbox at 7am.</p>
+          <form class="digest-form" id="digestForm">
+            <input type="email" id="digestEmail" placeholder="you@founder.co" required />
+            <button type="submit" class="digest-join">JOIN</button>
+          </form>
+          <p class="digest-ok" id="digestOk" hidden>You're on the list &mdash; first digest lands 7am.</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="footer">
+    <span class="foot-left">FOUNDER/RADAR <span class="foot-dot">•</span> SIGNAL FROM THE NOISE</span>
+    <span class="foot-right">&copy; 2026 <span class="foot-dot">•</span> NOT AFFILIATED WITH REDDIT INC.</span>
+  </footer>
+
+  <!-- Scripts (plain, load-order dependent, global FR namespace) -->
+  <script src="js/data.js"></script>
+  <script src="js/classify.js"></script>
+  <script src="js/pullpush.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
