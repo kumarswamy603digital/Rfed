@@ -214,11 +214,25 @@
     render();
   }
 
-  function onDigestSubmit(e) {
+  async function onDigestSubmit(e) {
     e.preventDefault();
     const email = (el.digestEmail.value || "").trim();
     if (!email) return;
+
+    const joinBtn = el.digestForm.querySelector(".digest-join");
+    if (joinBtn) { joinBtn.disabled = true; joinBtn.textContent = "\u2026"; }
+
     try { localStorage.setItem(LS_EMAIL, email); } catch {}
+
+    // Register with the backend; if it's not deployed, still confirm locally.
+    try {
+      await fetch("/api/digest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    } catch { /* offline / static deploy — local confirmation is enough */ }
+
     el.digestForm.hidden = true;
     el.digestOk.hidden = false;
   }
@@ -229,26 +243,56 @@
     el.feedStatus.innerHTML = html;
   }
 
-  /* ---------- live scan ---------- */
-  async function runScan() {
-    setStatus(`<span class="live-dot">&#9679;</span> Scanning ${FR.config.subreddits.length} communities via PullPush&hellip;`);
-    let result;
+  /* ---------- live scan ----------
+     Strategy, most-preferred first:
+       1. Our own backend  GET /api/signals  (full-stack / Vercel deploy)
+       2. Direct browser  ->  PullPush.io      (pure-static deploy)
+       3. Curated seed data                    (offline / everything down)  */
+  async function fetchBackend() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
     try {
-      result = await FR.pullpush.scanAll();
+      const res = await fetch("/api/signals", {
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      if (data && data.ok && Array.isArray(data.signals) && data.signals.length) {
+        return { ...data, via: "backend" };
+      }
+      return { ok: false };
     } catch {
-      result = { ok: false };
+      return { ok: false };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function runScan() {
+    setStatus(`<span class="live-dot">&#9679;</span> Scanning ${FR.config.subreddits.length} communities&hellip;`);
+
+    let result = await fetchBackend();
+    let via = "backend";
+
+    if (!(result && result.ok)) {
+      // Fall back to fetching PullPush directly from the browser.
+      via = "client";
+      try { result = await FR.pullpush.scanAll(); }
+      catch { result = { ok: false }; }
     }
 
     if (result && result.ok && result.signals.length > 0) {
       state.signals = result.signals;
       state.live = true;
       renderAll(result.scanned);
-      setStatus(`<span class="live-dot">&#9679;</span> LIVE &mdash; ${result.signals.length} signals from ${fmt(result.scanned)} posts scanned. Auto-refresh every 15 min.`);
+      const label = via === "backend" ? "LIVE via API" : "LIVE (direct)";
+      setStatus(`<span class="live-dot">&#9679;</span> ${label} &mdash; ${result.signals.length} signals from ${fmt(result.scanned)} posts scanned. Auto-refresh every 15 min.`);
     } else {
       // Keep seed data; make clear it's the demo set.
       state.live = false;
       renderAll();
-      setStatus(`Showing curated sample signals &mdash; live PullPush scan unavailable right now (offline or rate-limited). Will retry automatically.`);
+      setStatus(`Showing curated sample signals &mdash; live scan unavailable right now (offline or rate-limited). Will retry automatically.`);
     }
   }
 

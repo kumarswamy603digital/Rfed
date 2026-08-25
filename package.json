@@ -1,0 +1,14 @@
+{
+  "name": "founder-radar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Every startup opportunity buried in Reddit, on one page. Scans founder communities via PullPush.io, classifies and scores signals.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "vercel dev",
+    "start": "vercel dev"
+  },
+  "license": "MIT"
+}
