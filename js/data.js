@@ -147,6 +147,11 @@
     },
   ];
 
+  // Seed entries are illustrative examples, not live posts. Flag them so the
+  // UI badges them and points their button at a Reddit search (never a
+  // subreddit dump). Live signals from the API/PullPush open the exact post.
+  FR.SEED.forEach((s) => { s.sample = true; });
+
   function nowMinus({ h = 0, d = 0 }) {
     return Math.floor(Date.now() / 1000) - h * 3600 - d * 86400;
   }

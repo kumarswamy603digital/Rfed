@@ -85,12 +85,27 @@
     const cat = categories[s.category] || categories.insight;
     const isSaved = state.saved.has(s.id);
     const tags = s.tags.map((t) => `<span class="tag">#${esc(t)}</span>`).join("");
+
+    // Sample signals have no real thread. Point their button at a Reddit
+    // search for the topic instead of dumping the user in a subreddit,
+    // and badge them clearly. Live signals open the EXACT post.
+    const isSample = !!s.sample;
+    const openUrl = isSample
+      ? "https://www.reddit.com/search/?q=" +
+        encodeURIComponent(String(s.title).replace(/[—–-]+/g, " ").slice(0, 200))
+      : s.permalink;
+    const openLabel = isSample ? "SEARCH" : "OPEN";
+    const openTitle = isSample
+      ? "Sample signal — searches Reddit for this topic"
+      : "Open the exact Reddit post";
+
     return `
-      <article class="card" style="--cat-color:${cat.color}" data-id="${esc(s.id)}">
+      <article class="card${isSample ? " is-sample" : ""}" style="--cat-color:${cat.color}" data-id="${esc(s.id)}">
         <div class="card-top">
           <span class="cat-tag">${esc(cat.label)}</span>
           <span class="card-sub">r/${esc(s.subreddit)}</span>
           <span class="card-age">${esc(timeAgo(s.createdUtc))}</span>
+          ${isSample ? `<span class="sample-badge" title="Example signal, not a live post">SAMPLE</span>` : ""}
           <span class="match">
             <span class="match-dot"></span>
             <span class="match-score">${s.match}</span> MATCH
@@ -110,8 +125,8 @@
             <button class="btn-save ${isSaved ? "saved" : ""}" data-action="save" data-id="${esc(s.id)}">
               ${isSaved ? "SAVED" : "SAVE"}
             </button>
-            <a class="btn-open" href="${esc(s.permalink)}" target="_blank" rel="noopener noreferrer">
-              OPEN <span>&#8599;</span>
+            <a class="btn-open" href="${esc(openUrl)}" target="_blank" rel="noopener noreferrer" title="${esc(openTitle)}">
+              ${openLabel} <span>&#8599;</span>
             </a>
           </span>
         </div>
@@ -361,9 +376,10 @@
     el.aiReport.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function setStatus(html) {
+  function setStatus(html, isSample) {
     if (!html) { el.feedStatus.hidden = true; return; }
     el.feedStatus.hidden = false;
+    el.feedStatus.classList.toggle("is-sample", !!isSample);
     el.feedStatus.innerHTML = html;
   }
 
@@ -407,16 +423,21 @@
     }
 
     if (result && result.ok && result.signals.length > 0) {
-      state.signals = result.signals;
+      // Live signals open the exact post; make sure none are flagged sample.
+      state.signals = result.signals.map((s) => ({ ...s, sample: false }));
       state.live = true;
       renderAll(result.scanned);
       const label = via === "backend" ? "LIVE via API" : "LIVE (direct)";
-      setStatus(`<span class="live-dot">&#9679;</span> ${label} &mdash; ${result.signals.length} signals from ${fmt(result.scanned)} posts scanned. Auto-refresh every 15 min.`);
+      setStatus(`<span class="live-dot">&#9679;</span> ${label} &mdash; ${result.signals.length} real signals from ${fmt(result.scanned)} posts scanned. Each OPEN link goes to the exact Reddit thread. Auto-refresh every 15 min.`, false);
     } else {
-      // Keep seed data; make clear it's the demo set.
+      // Keep seed data; make it unmistakable that these are examples.
       state.live = false;
       renderAll();
-      setStatus(`Showing curated sample signals &mdash; live scan unavailable right now (offline or rate-limited). Will retry automatically.`);
+      setStatus(
+        `<strong>Showing SAMPLE signals</strong> &mdash; these are examples, so their button runs a Reddit <em>search</em> (there's no exact post to open). ` +
+        `The live scan is unavailable right now. To get real, one-click-to-the-exact-post opportunities, deploy on Vercel and set the <strong>REDDIT_CLIENT_ID</strong> + <strong>REDDIT_CLIENT_SECRET</strong> env vars. Retrying automatically&hellip;`,
+        true
+      );
     }
   }
 
