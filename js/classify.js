@@ -75,11 +75,24 @@
   function categorize(post) {
     const t = text(post);
 
-    const scores = {
-      cofounder: countHits(t, KW.cofounder) * 3,
-      hiring: countHits(t, KW.hiring) * 2,
-      idea: countHits(t, KW.idea) * 2,
+    // Raw keyword evidence (before subreddit nudging).
+    const kw = {
+      cofounder: countHits(t, KW.cofounder),
+      hiring: countHits(t, KW.hiring),
+      idea: countHits(t, KW.idea),
       insight: countHits(t, KW.insight),
+    };
+    const kwTotal = kw.cofounder + kw.hiring + kw.idea + kw.insight;
+
+    // No real evidence -> noise, not an opportunity.
+    if (kwTotal === 0) return null;
+    if (countHits(t, NOISE) >= 2 && kwTotal <= 1) return null;
+
+    const scores = {
+      cofounder: kw.cofounder * 3,
+      hiring: kw.hiring * 2,
+      idea: kw.idea * 2,
+      insight: kw.insight,
     };
 
     // Subreddit nudges.
@@ -89,13 +102,13 @@
     if (sub === "saas") scores.insight += 1;
 
     const best = Object.keys(scores).reduce((a, b) => (scores[b] > scores[a] ? b : a), "insight");
-
-    // Reject as noise if nothing meaningful matched and it trips a noise phrase.
-    const noiseHits = countHits(t, NOISE);
-    if (scores[best] === 0 && noiseHits > 0) return null;
     if (scores[best] === 0) return null;
-
     return best;
+  }
+
+  /* Normalized title key for de-duplication. */
+  function normTitle(s) {
+    return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   }
 
   /* MATCH score 0-100: relevance signal blended from keyword strength,
@@ -158,8 +171,9 @@
   /* Convert a raw PullPush submission into a signal, or null if it's noise. */
   function toSignal(post) {
     if (!post || !post.title) return null;
-    // Skip removed/deleted content.
-    if (post.selftext === "[removed]" || post.selftext === "[deleted]") { /* still allow title-only */ }
+    // Never surface removed/deleted content.
+    if (post.selftext === "[removed]" || post.selftext === "[deleted]") return null;
+    if (post.author === "[deleted]" || post.author === "[removed]") return null;
 
     const norm = {
       title: cleanText(post.title, 140),
@@ -202,5 +216,5 @@
     return Math.floor(diff / 86400) + "d ago";
   }
 
-  FR.classify = { toSignal, categorize, scoreMatch, deriveTags, cleanText, timeAgo };
+  FR.classify = { toSignal, categorize, scoreMatch, deriveTags, cleanText, timeAgo, normTitle };
 })();

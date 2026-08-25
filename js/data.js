@@ -12,6 +12,8 @@
     pullSize: 40,
     // How often the client re-scans (ms). 15 min.
     refreshMs: 15 * 60 * 1000,
+    // Only surface reasonably-relevant opportunities (mirrors backend).
+    minMatch: 52,
     pullpushBase: "https://api.pullpush.io/reddit/search/submission/",
   };
 

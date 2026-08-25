@@ -62,25 +62,35 @@
       return { ok: false, error: "network", signals: [], scanned: 0, sources: {} };
     }
 
-    // Classify + collect.
-    const seen = new Set();
-    const signals = [];
-    const sources = {};
-    for (const sub of subs) sources[sub] = 0;
+    const minMatch = (FR.config && FR.config.minMatch) || 52;
 
+    // Classify + de-dupe by id.
+    const seenId = new Set();
+    const collected = [];
     for (const sub of subs) {
       for (const post of rawBySub[sub] || []) {
         const sig = FR.classify.toSignal(post);
         if (!sig) continue;
-        if (seen.has(sig.id)) continue;
-        seen.add(sig.id);
-        signals.push(sig);
-        if (sources[sig.subreddit] === undefined) sources[sig.subreddit] = 0;
-        sources[sig.subreddit]++;
+        if (sig.match < minMatch) continue;
+        if (seenId.has(sig.id)) continue;
+        seenId.add(sig.id);
+        collected.push(sig);
       }
     }
 
-    signals.sort((a, b) => b.match - a.match);
+    // Rank, then de-dupe by normalized title (keep strongest copy).
+    collected.sort((a, b) => b.match - a.match);
+    const seenTitle = new Set();
+    const signals = [];
+    const sources = {};
+    for (const sub of subs) sources[sub] = 0;
+    for (const sig of collected) {
+      const key = FR.classify.normTitle(sig.title);
+      if (seenTitle.has(key)) continue;
+      seenTitle.add(key);
+      signals.push(sig);
+      sources[sig.subreddit] = (sources[sig.subreddit] || 0) + 1;
+    }
 
     return { ok: true, signals, scanned, sources };
   }
